@@ -1,83 +1,86 @@
 import os
-import google.generativeai as genai
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pypdf import PdfReader
 import yaml
+from fastmcp import FastMCP
+from qdrant_client import QdrantClient
+from sentence_transformers import SentenceTransformer
+
+# =========================
+# 1. Load cấu hình & Khởi tạo Model
+# =========================
+curr_dir = os.path.dirname(__file__)
+config_path = os.path.join(curr_dir, '../..', 'config.yml')
+
+with open(config_path, 'r', encoding='utf-8') as f:
+    cfg = yaml.safe_load(f)
+
+# SỬA ĐỔI: Sử dụng model BGE-base Local (768 dims) giống hệt lúc Index
+EMBED_MODEL_NAME = "BAAI/bge-base-en-v1.5"
+embed_model = SentenceTransformer(EMBED_MODEL_NAME)
+
+# Khởi tạo MCP Server
+mcp = FastMCP("Research-Gateway")
+# Khởi tạo Qdrant Client
+qdrant = QdrantClient(host="127.0.0.1", port=6333)
 
 
-cfg = yaml.load(open('../config.yml', 'r'), Loader=yaml.FullLoader)
+# =========================
+# 2. Hàm lấy Embedding (Đồng bộ với Index)
+# =========================
+def get_query_embedding(text: str):
+    """
+    Sử dụng model local để tạo vector 768 chiều.
+    Không còn phụ thuộc vào API_URL hay HF_TOKEN.
+    """
+    try:
+        # BGE model khuyến khích thêm chỉ dẫn truy vấn để đạt độ chính xác cao nhất
+        instruction_query = f"Represent this sentence for searching relevant passages: {text}"
+        vector = embed_model.encode(instruction_query).tolist()
+        return vector
+    except Exception as e:
+        print(f"❌ Lỗi tạo Embedding: {e}")
+        return None
 
-# 1. Cấu hình API
-GENIMI_API_KEY = cfg['GENIMI_API_KEY']
-genai.configure(api_key=GENIMI_API_KEY)
-qdrant_client = QdrantClient("localhost", port=6333)
 
-# 2. Định nghĩa Model Embedding của Gemini
-EMBED_MODEL = "models/text-embedding-004"  # 768 dimensions
+@mcp.tool()
+async def search_papers(topic: str, query: str, limit: int = 5) -> str:
 
+    # Xử lý trường hợp Agent gửi topic là 'both' hoặc không hợp lệ
+    topics_to_search = []
+    if topic == "both":
+        topics_to_search = ["topic1_fl", "topic2_sl"]
+    else:
+        topics_to_search = [topic]
 
-def create_collection(collection_name):
-    """Tạo collection nếu chưa tồn tại"""
-    if not qdrant_client.collection_exists(collection_name):
-        qdrant_client.create_collection(
+    all_results = []
+
+    # Lấy vector cho câu truy vấn (768 dims)
+    query_vector = get_query_embedding(query)
+    if not query_vector:
+        return "Lỗi: Không thể khởi tạo vector tìm kiếm."
+
+    for t in topics_to_search:
+        collection_name = f"collection_{t}"
+
+        if not qdrant.collection_exists(collection_name):
+            continue
+
+        # Truy vấn Qdrant
+        results = qdrant.search(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+            query_vector=query_vector,
+            limit=limit
         )
-        print(f"Đã tạo collection: {collection_name}")
+
+        for res in results:
+            source = res.payload.get("source", "Unknown")
+            content = res.payload.get("text", "")
+            all_results.append(f"Source: {source} (Topic: {t})\nContent: {content}")
+
+    if not all_results:
+        return f"Không tìm thấy tài liệu liên quan đến '{query}'."
+
+    return "\n\n---\n\n".join(all_results)
 
 
-def get_embedding(text):
-    """Gọi Gemini API để lấy vector"""
-    result = genai.embed_content(
-        model=EMBED_MODEL,
-        content=text,
-        task_type="retrieval_document"
-    )
-    return result['embedding']
-
-
-def process_pdf_to_qdrant(pdf_path, collection_name):
-    print(f"Đang xử lý: {pdf_path} -> {collection_name}")
-    create_collection(collection_name)
-
-    # Đọc PDF
-    reader = PdfReader(pdf_path)
-    full_text = ""
-    for page in reader.pages:
-        full_text += page.extract_text()
-
-    # Cắt nhỏ văn bản (Chunking)
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=100
-    )
-    chunks = text_splitter.split_text(full_text)
-
-    # Chuẩn bị Points để đẩy vào Qdrant
-    points = []
-    for i, chunk in enumerate(chunks):
-        vector = get_embedding(chunk)
-        points.append(PointStruct(
-            id=hash(f"{pdf_path}_{i}") & 0xFFFFFFFFFFFFFFFF,  # Tạo ID duy nhất
-            vector=vector,
-            payload={
-                "text": chunk,
-                "source": pdf_path,
-                "topic": collection_name
-            }
-        ))
-
-    # Upsert vào Qdrant
-    qdrant_client.upsert(collection_name=collection_name, points=points)
-    print(f"✨ Đã đẩy {len(points)} chunks vào {collection_name}")
-
-
-# --- THỰC THI ---
 if __name__ == "__main__":
-    # Đẩy dữ liệu vào Topic 1: Federated Learning
-    process_pdf_to_qdrant("paper_fed_learning.pdf", "topic_federated_learning")
-
-    # Đẩy dữ liệu vào Topic 2: Reinforcement Learning
-    process_pdf_to_qdrant("paper_rl.pdf", "topic_reinforcement_learning")
+    mcp.run()

@@ -1,2 +1,5 @@
 # Sửa tên thành config.yml để dùng
 GOOGLE_API_KEY: ABC
+
+# Hugging face
+HF_TOKEN: abc
