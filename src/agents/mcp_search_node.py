@@ -2,21 +2,41 @@ from src.server.mcp_server import search_papers  # Import trực tiếp từ ser
 from src.utils.state import AgentState
 
 
-async def mcp_search_node(state: AgentState):
-    """Node trung gian kết nối Graph với dữ liệu Qdrant"""
-    # 1. Lấy thông tin topic và query từ State
-    topic = state.get("next_node", "both")
+async def mcp_search_node(state):
+    # 1. Lấy danh sách sub-queries từ State (do Citation Agent sinh ra)
+    # Nếu không có (ví dụ lỗi LLM), lấy lại câu hỏi gốc của người dùng làm fallback
+    sub_queries = state.get("sub_queries", [])
+    if not sub_queries:
+        original_query = state["messages"][0].content
+        sub_queries = [original_query]
 
-    query = state["messages"][0].content
-    print(f"Query : {query} | topic : {topic}")
+    topic = state.get("topic", "both")
+    print(f"\nBẮT ĐẦU TRUY XUẤT SÂU (DEEP SEARCH) | Topic: {topic}")
+    print(f"Tổng số Sub-queries cần tìm: {len(sub_queries)}")
 
-    # 2. Xử lý logic search cho trường hợp 'both'
-    if topic == "both":
-        data_fl = await search_papers(topic="topic1_fl", query=query)
-        data_sl = await search_papers(topic="topic2_sl", query=query)
-        final_data = f"--- FEDERATED LEARNING ---\n{data_fl}\n\n--- SPLIT LEARNING ---\n{data_sl}"
-    else:
-        final_data = await search_papers(topic=topic, query=query)
+    accumulated_data = ""
 
-    # 3. Ghi dữ liệu vào research_data để Analyst có thể đọc
-    return {"research_data": final_data}
+    # 2. Vòng lặp: Quét Qdrant cho TỪNG sub-query để không bỏ sót khía cạnh nào
+    for i, sq in enumerate(sub_queries):
+        print(f"Đang quét Qdrant cho sub-query {i + 1}: '{sq}'...")
+
+        if topic == "both":
+            data_fl = await search_papers(topic="topic1_fl", query=sq)
+            data_sl = await search_papers(topic="topic2_sl", query=sq)
+
+            sq_result = (
+                f"--- FEDERATED LEARNING ---\n{data_fl}\n\n"
+                f"--- SPLIT LEARNING ---\n{data_sl}"
+            )
+        else:
+            sq_result = await search_papers(topic=topic, query=sq)
+
+        # 3. Gom (Aggregate) dữ liệu lại, đánh dấu rõ ràng từng phần cho Analyst dễ đọc
+        accumulated_data += f"\n\n{'=' * 50}\n"
+        accumulated_data += f"NGỮ CẢNH TRÍCH XUẤT TỪ QDRANT CHO: '{sq}'\n"
+        accumulated_data += f"{'=' * 50}\n"
+        accumulated_data += f"{sq_result}\n"
+
+    # 4. Ghi toàn bộ khối lượng tri thức khổng lồ này vào research_data
+    print(f"Hoàn thành Deep Search. Tổng dung lượng ngữ cảnh: {len(accumulated_data)} ký tự.")
+    return {"research_data": accumulated_data.strip()}

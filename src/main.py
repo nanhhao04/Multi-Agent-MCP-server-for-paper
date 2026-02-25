@@ -5,8 +5,11 @@ from src.agents.graph import app
 from src.utils.config_loader import cfg
 
 
+
+
+
 async def run_research(query: str):
-    print(f"\n🚀 Khởi chạy hệ thống DRAN: {query}")
+    print(f"\n Khởi chạy hệ thống DRAN: {query}")
     print("-" * 50)
 
     initial_state = {
@@ -49,6 +52,7 @@ async def run_research(query: str):
 
 if __name__ == "__main__":
     # Nhập câu hỏi nghiên cứu của bạn ở đây
+
     user_query = "pfed lora"
 
     # Chạy vòng lặp sự kiện async

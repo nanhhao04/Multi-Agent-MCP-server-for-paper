@@ -1,21 +1,20 @@
-# --- LLM & AI Frameworks ---
 google-generativeai          # Kết nối trực tiếp Gemini API
 langchain-google-genai       # Tích hợp Gemini vào hệ sinh thái LangChain
 langgraph                    # Quản lý luồng Multi-Agent (A2A)
 
-# --- MCP (Model Context Protocol) ---
+
 fastmcp                      # SDK để viết MCP Server nhanh chóng
 
-# --- Vector Database ---
+
 qdrant-client                # Kết nối và thao tác với Qdrant
 
-# --- Data Processing ---
 pypdf                        # Đọc file PDF từ thư mục data/
 langchain-text-splitters     # Chia nhỏ văn bản (Chunking) để embedding
 python-dotenv                # Quản lý biến môi trường (API Key trong .env)
 pyyaml                       # Đọc cấu hình từ file config.yml
 
-# --- Utilities (Tùy chọn nhưng nên có) ---
+
 tqdm                         # Hiển thị progress bar khi index dữ liệu
 
 flask
+# pip install "Flask[async]"

@@ -10,6 +10,8 @@ class AgentState(TypedDict):
     # research_data: Chứa nội dung thô lấy từ Qdrant
     research_data: str
 
+    sub_queries : List[str]
+
     # summary_report: Bản tóm tắt các paper từ Analyst Agent
     summary_report: str
 
@@ -20,4 +22,4 @@ class AgentState(TypedDict):
     final_proposal: str
 
     # next_node: Điều hướng luồng chạy trong Graph
-    next_node: str
+    topic: str

@@ -2,11 +2,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 import yaml
 import os
+from src.utils.config_llm import llm
 
-with open(os.path.join(os.path.dirname(__file__), '../../config.yml'), 'r', encoding='utf-8') as f:
-    cfg = yaml.safe_load(f)
-
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=cfg['GOOGLE_API_KEY'])
 
 
 def idea_gen_node(state):

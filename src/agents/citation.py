@@ -3,41 +3,44 @@ import yaml
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, ToolMessage
 from src.utils.config_loader import cfg
-
-# Khởi tạo Gemini Flash để nhận diện ý định tìm kiếm (nhanh và rẻ)
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=cfg['GOOGLE_API_KEY']
-)
+from src.utils.config_llm import llm
 
 
 def citation_node(state):
-    """
-    Nhiệm vụ: Trích xuất keyword từ câu hỏi và chuẩn bị dữ liệu cho việc gọi MCP Tool.
-    Trong LangGraph, node này sẽ chuẩn bị 'research_data' bằng cách gọi search_papers.
-    """
-    # 1. Lấy tin nhắn cuối cùng của người dùng từ State
     query = state["messages"][-1].content
 
-    # 2. Yêu cầu LLM xác định nên search vào topic nào: topic1_fl hay topic2_sl
+    # Nâng cấp Prompt: Vừa lấy topic, vừa sinh sub-queries
     prompt = f"""
-    Dựa trên câu hỏi của người dùng: "{query}"
-    Hãy xác định chủ đề nghiên cứu thuộc về:
-    - 'topic1_fl' (nếu nói về Federated Learning)
-    - 'topic2_sl' (nếu nói về Split Learning)
-    - 'both' (nếu đề cập cả hai hoặc so sánh)
+    Bạn là một chuyên gia lập kế hoạch nghiên cứu AI.
+    Câu hỏi của người dùng: "{query}"
 
-    Chỉ trả ra tên topic hoặc 'both', không giải thích thêm.
+    Nhiệm vụ:
+    1. Xác định topic ('topic1_fl', 'topic2_sl', hoặc 'both').
+    2. Đặt ra 3 câu hỏi phụ (sub-queries) bao quát các khía cạnh kỹ thuật của câu hỏi trên để tìm kiếm tài liệu.
+
+    BẮT BUỘC TRẢ VỀ ĐÚNG FORMAT SAU (Các thành phần cách nhau bởi dấu |):
+    TOPIC|Câu hỏi phụ 1|Câu hỏi phụ 2|Câu hỏi phụ 3
+
+    Ví dụ: both|Kiến trúc cơ bản của FL|Cách SL nén dữ liệu|So sánh hiệu năng FL và SL
     """
 
-    topic_decision = llm.invoke([HumanMessage(content=prompt)]).content.strip().lower()
-    print(topic_decision)
+    response = llm.invoke([HumanMessage(content=prompt)]).content.strip()
 
-    # 3. Giả lập hoặc điều hướng gọi MCP Tool (Thực tế MCP Tool được gọi thông qua mcp_server.py)
-    # Trong môi trường LangGraph + MCP, kết quả từ MCP Tool search_papers
-    # sẽ được đưa vào research_data.
+    # Xử lý chuỗi trả về để lấy dữ liệu
+    parts = response.split('|')
+    topic_decision = parts[0].strip().lower()
+
+    # Nếu LLM trả về đúng định dạng, lấy các câu hỏi phụ. Nếu lỗi, lấy câu gốc.
+    if len(parts) >= 2:
+        sub_queries = [p.strip() for p in parts[1:] if p.strip()]
+    else:
+        sub_queries = [query]
+
+    print(f"Đã xác định Topic: {topic_decision}")
+    print(f"Đã sinh ra các Sub-queries: {sub_queries}")
 
     return {
-        "next_node": topic_decision,  # Trả về topic để node sau sử dụng
-        "messages": [HumanMessage(content=f"Phát hiện chủ đề: {topic_decision}")]
+        "topic": topic_decision,
+        "sub_queries": sub_queries,
+        "messages": [HumanMessage(content=f"Đang tiến hành tìm kiếm sâu đa chiều cho chủ đề: {topic_decision}")]
     }
