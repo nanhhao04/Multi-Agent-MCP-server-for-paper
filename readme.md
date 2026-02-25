@@ -14,3 +14,12 @@ docker run -p 6333:6333 -p 6334:6334 `
 ```
 http://localhost:6333/dashboard
 ```
+
+## Cách chạy
+```
+python app.py
+```
+### Truy cập vào localhost để xem giao diện
+```
+http://127.0.0.1:5000
+```
