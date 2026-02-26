@@ -1,5 +1,7 @@
 import json
 import os
+import ssl
+
 import yaml
 from fastmcp import FastMCP
 from qdrant_client import QdrantClient
@@ -58,24 +60,25 @@ async def search_arxiv(query: str, max_results: int = 3) -> str:
         safe_query = urllib.parse.quote(query)
         url = f'http://export.arxiv.org/api/query?search_query=all:{safe_query}&start=0&max_results={max_results}'
 
-        # Gọi API
-        response = urllib.request.urlopen(url)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        # Gọi API truyền kèm ctx
+        response = urllib.request.urlopen(url, context=ctx)
         data = response.read().decode('utf-8')
 
         # Phân tích XML trả về
         root = ET.fromstring(data)
-
-        # Namespace của ArXiv XML
         ns = {'atom': 'http://www.w3.org/2005/Atom'}
 
         results = []
         log_data = []
+
         for entry in root.findall('atom:entry', ns):
             title = entry.find('atom:title', ns).text.strip().replace('\n', ' ')
             summary = entry.find('atom:summary', ns).text.strip().replace('\n', ' ')
             published = entry.find('atom:published', ns).text[:10]  # Lấy YYYY-MM-DD
-
-            # Lấy tên tác giả đầu tiên
             author = entry.find('atom:author/atom:name', ns).text
 
             log_data.append({
@@ -87,13 +90,16 @@ async def search_arxiv(query: str, max_results: int = 3) -> str:
             })
 
             results.append(
-                f"- Tiêu đề: {title}\n- Tác giả chính: {author}\n- Xuất bản: {published}\n- Abstract: {summary}\n")
+                f"- Tiêu đề: {title}\n- Tác giả chính: {author}\n- Xuất bản: {published}\n- Abstract: {summary}\n"
+            )
 
+        if log_data:
             curr_dir = os.path.dirname(__file__)
             log_dir = os.path.abspath(os.path.join(curr_dir, '../../log'))
             os.makedirs(log_dir, exist_ok=True)
             log_file = os.path.join(log_dir, 'arxiv.json')
 
+            # Chỉ ghi file 1 lần duy nhất sau khi đã gom đủ data
             with open(log_file, "w", encoding="utf-8") as f:
                 json.dump(log_data, f, ensure_ascii=False, indent=4)
 
@@ -104,6 +110,8 @@ async def search_arxiv(query: str, max_results: int = 3) -> str:
 
     except Exception as e:
         return f"Lỗi khi kết nối ArXiv API: {str(e)}"
+
+
 @mcp.tool()
 async def search_papers(topic: str, query: str, limit: int = 5) -> str:
     topics_to_search = []
