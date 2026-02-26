@@ -1,3 +1,4 @@
+import json
 import os
 import yaml
 from fastmcp import FastMCP
@@ -41,17 +42,70 @@ def get_query_embedding(text: str):
         return None
 
 
-# =========================
-# 3. Định nghĩa Công cụ (Tools)
-# =========================
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
+
+
+@mcp.tool()
+async def search_arxiv(query: str, max_results: int = 3) -> str:
+    """
+    Tìm kiếm các bài báo khoa học mới nhất từ ArXiv.
+    Sử dụng khi cần cập nhật kiến thức SOTA hoặc tìm các paper chưa có trong Qdrant.
+    """
+    try:
+        # Encode query để đưa lên URL hợp lệ
+        safe_query = urllib.parse.quote(query)
+        url = f'http://export.arxiv.org/api/query?search_query=all:{safe_query}&start=0&max_results={max_results}'
+
+        # Gọi API
+        response = urllib.request.urlopen(url)
+        data = response.read().decode('utf-8')
+
+        # Phân tích XML trả về
+        root = ET.fromstring(data)
+
+        # Namespace của ArXiv XML
+        ns = {'atom': 'http://www.w3.org/2005/Atom'}
+
+        results = []
+        log_data = []
+        for entry in root.findall('atom:entry', ns):
+            title = entry.find('atom:title', ns).text.strip().replace('\n', ' ')
+            summary = entry.find('atom:summary', ns).text.strip().replace('\n', ' ')
+            published = entry.find('atom:published', ns).text[:10]  # Lấy YYYY-MM-DD
+
+            # Lấy tên tác giả đầu tiên
+            author = entry.find('atom:author/atom:name', ns).text
+
+            log_data.append({
+                "query": query,
+                "title": title,
+                "author": author,
+                "published": published,
+                "summary": summary
+            })
+
+            results.append(
+                f"- Tiêu đề: {title}\n- Tác giả chính: {author}\n- Xuất bản: {published}\n- Abstract: {summary}\n")
+
+            curr_dir = os.path.dirname(__file__)
+            log_dir = os.path.abspath(os.path.join(curr_dir, '../../log'))
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, 'arxiv.json')
+
+            with open(log_file, "w", encoding="utf-8") as f:
+                json.dump(log_data, f, ensure_ascii=False, indent=4)
+
+        if not results:
+            return f"Không tìm thấy bài báo nào trên ArXiv cho từ khóa '{query}'."
+
+        return "\n".join(results)
+
+    except Exception as e:
+        return f"Lỗi khi kết nối ArXiv API: {str(e)}"
 @mcp.tool()
 async def search_papers(topic: str, query: str, limit: int = 5) -> str:
-    """
-    Tìm kiếm thông tin từ cơ sở dữ liệu paper theo topic.
-    - topic: 'topic1_fl' hoặc 'topic2_sl'.
-    - query: Từ khóa tìm kiếm (ví dụ: 'pfed lora').
-    """
-    # Xử lý trường hợp Agent gửi topic là 'both' hoặc không hợp lệ
     topics_to_search = []
     if topic == "both":
         topics_to_search = ["topic1_fl", "topic2_sl"]
@@ -60,7 +114,7 @@ async def search_papers(topic: str, query: str, limit: int = 5) -> str:
 
     all_results = []
 
-    # Lấy vector cho câu truy vấn (768 dims)
+
     query_vector = get_query_embedding(query)
     if not query_vector:
         return "Lỗi: Không thể khởi tạo vector tìm kiếm."

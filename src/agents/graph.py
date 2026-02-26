@@ -14,6 +14,17 @@ from src.agents.idea_gen import idea_gen_node
 
 workflow = StateGraph(AgentState)
 
+
+def route_after_analyst(state):
+    intent = state.get("intent", "full_research")
+
+    if intent == "summary_only":
+        print("Router: Người dùng chỉ cần tóm tắt. Kết thúc sớm!")
+        return END  # Bỏ qua Gap và Idea Gen
+    else:
+        print("Router: Bắt đầu phân tích sâu (Gap & Idea).")
+        return "gap_detector"
+
 # 2. Thêm các Nodes (Các bước xử lý)
 
 workflow.add_node("citation_expert", citation_node)
@@ -27,7 +38,16 @@ workflow.add_node("idea_generator", idea_gen_node)      # Đề xuất hướng 
 workflow.set_entry_point("citation_expert")
 workflow.add_edge("citation_expert", "mcp_search") # Expert báo topic -> Search đi tìm
 workflow.add_edge("mcp_search", "paper_analyst")   # Search có data -> Analyst làm việc
-workflow.add_edge("paper_analyst", "gap_detector")
+workflow.add_conditional_edges(
+    "paper_analyst",       # Node xuất phát
+    route_after_analyst,   # Hàm quyết định đường đi
+    # Tùy chọn: Mapping kết quả hàm trả về với tên Node
+    {
+        "gap_detector": "gap_detector",
+        END: END
+    }
+)
+#workflow.add_edge("paper_analyst", "gap_detector")
 workflow.add_edge("gap_detector", "idea_generator")
 workflow.add_edge("idea_generator", END)
 

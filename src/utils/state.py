@@ -9,6 +9,7 @@ class AgentState(TypedDict):
 
     # research_data: Chứa nội dung thô lấy từ Qdrant
     research_data: str
+    intent: str
 
     sub_queries : List[str]
 

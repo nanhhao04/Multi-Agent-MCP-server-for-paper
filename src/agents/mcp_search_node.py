@@ -1,13 +1,16 @@
-from src.server.mcp_server import search_papers  # Import trực tiếp từ server của bạn
+from src.server.mcp_server import search_papers, search_arxiv  # Import trực tiếp từ server của bạn
 from src.utils.state import AgentState
 
 
 async def mcp_search_node(state):
     # 1. Lấy danh sách sub-queries từ State (do Citation Agent sinh ra)
-    # Nếu không có (ví dụ lỗi LLM), lấy lại câu hỏi gốc của người dùng làm fallback
+    original_query = state["messages"][0].content
+    print(f"Original query: {original_query}")
+
     sub_queries = state.get("sub_queries", [])
     if not sub_queries:
         original_query = state["messages"][0].content
+        print(f"Original query: {original_query}")
         sub_queries = [original_query]
 
     topic = state.get("topic", "both")
@@ -32,10 +35,15 @@ async def mcp_search_node(state):
             sq_result = await search_papers(topic=topic, query=sq)
 
         # 3. Gom (Aggregate) dữ liệu lại, đánh dấu rõ ràng từng phần cho Analyst dễ đọc
-        accumulated_data += f"\n\n{'=' * 50}\n"
+        accumulated_data += f"\n\n{'=' * 20}\n"
         accumulated_data += f"NGỮ CẢNH TRÍCH XUẤT TỪ QDRANT CHO: '{sq}'\n"
-        accumulated_data += f"{'=' * 50}\n"
+        accumulated_data += f"{'=' * 20}\n"
         accumulated_data += f"{sq_result}\n"
+
+    data_arxiv = await search_arxiv(query=original_query)
+    accumulated_data += f"\n\n{'=' * 20}\n"
+    accumulated_data += f"Các bài paper liên quan: '{data_arxiv}'\n"
+
 
     # 4. Ghi toàn bộ khối lượng tri thức khổng lồ này vào research_data
     print(f"Hoàn thành Deep Search. Tổng dung lượng ngữ cảnh: {len(accumulated_data)} ký tự.")

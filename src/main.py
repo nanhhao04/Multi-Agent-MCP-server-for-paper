@@ -29,21 +29,21 @@ async def run_research(query: str):
             if "research_data" in output:
                 data = output["research_data"]
                 if not data or "Lỗi" in data or "Error" in data:
-                    print(f"❌ LỖI DỮ LIỆU TẠI {node_name}: {data}")
+                    print(f"LỖI DỮ LIỆU TẠI {node_name}: {data}")
                 else:
-                    print(f"✅ Đã lấy được dữ liệu bài báo ({len(data)} ký tự).")
+                    print(f"Đã lấy được dữ liệu bài báo ({len(data)} ký tự).")
 
             # 2. Log nội dung tóm tắt từ Analyst
             if "summary_report" in output:
-                print(f"📝 Analyst Report Preview: {output['summary_report'][:150]}...")
+                print(f"Analyst Report Preview: {output['summary_report'][:150]}...")
 
             # 3. Log Gaps phát hiện được
             if "gaps" in output:
-                print(f"🔍 Research Gaps identified: {output['gaps'][:150]}")
+                print(f"Research Gaps identified: {output['gaps'][:150]}")
 
             # 4. Log tin nhắn điều hướng (Next Node)
             if "next_node" in output:
-                print(f"📍 Điều hướng tiếp theo: {output['next_node']}")
+                print(f"Điều hướng tiếp theo: {output['next_node']}")
 
     # Kết thúc
     print("\n" + "=" * 50)
